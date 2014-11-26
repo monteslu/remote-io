@@ -1,0 +1,29 @@
+{
+  "name": "remoteio",
+  "version": "0.1.0",
+  "description": "remote control any io plugin via firmata",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git@github.com:monteslu/remote-io.git"
+  },
+  "keywords": [
+    "firmata",
+    "johnny-five",
+    "io-plugin",
+    "mqtt",
+    "socket.io"
+  ],
+  "author": "Luis Montes",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/monteslu/remote-io/issues"
+  },
+  "homepage": "https://github.com/monteslu/remote-io",
+  "dependencies": {
+    "lodash": "^2.4.1"
+  }
+}
