@@ -1,6 +1,6 @@
 {
-  "name": "remoteio",
-  "version": "0.1.0",
+  "name": "remote-io",
+  "version": "0.2.0",
   "description": "remote control any io plugin via firmata",
   "main": "index.js",
   "scripts": {

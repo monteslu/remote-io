@@ -265,8 +265,9 @@ SYSEX_RESPONSE[CAPABILITY_QUERY] = function(board){
 
 
 SYSEX_RESPONSE[ANALOG_MAPPING_QUERY] = function(board){
-  board.io.queryAnalogMapping(function(err, data){
-    console.log('SYSEX_RESPONSE[ANALOG_MAPPING_QUERY]', err, data);
+
+  function writeMappings(){
+    console.log('SYSEX_RESPONSE[ANALOG_MAPPING_QUERY]');
 
     var output = [START_SYSEX,ANALOG_MAPPING_RESPONSE];
     for (var i = 0; i < board.io.pins.length; i++) {
@@ -277,7 +278,14 @@ SYSEX_RESPONSE[ANALOG_MAPPING_QUERY] = function(board){
 
     board.sp.write(new Buffer(output));
     console.log('ANALOG_MAPPING_QUERY done');
-  });
+  }
+
+  if(board.io.queryAnalogMapping){
+    board.io.queryAnalogMapping(writeMappings);
+  }else{
+    writeMappings();
+  }
+
 }
 
 
