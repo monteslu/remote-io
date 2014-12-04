@@ -7,6 +7,7 @@ var _ = require('lodash');
 var FIRMWARE_NAME = 'VirtualFirmata';
 var FIRMWARE_VERSION_MAJOR = 2;
 var FIRMWARE_VERSION_MINOR = 3;
+var IO_NAME = 'Firmata'; //this helps johnny-five do pin mapping
 
 function pad(n, width, z) {
   z = z || '0';
@@ -83,27 +84,94 @@ var MODES = {
 
 
 /**
- * MIDI_RESPONSE contains functions to be called when we receive a MIDI message from the arduino.
+ * MIDI_REQUEST contains functions to be called when we receive a MIDI message from over the wire.
  * used as a switch object as seen here http://james.padolsey.com/javascript/how-to-avoid-switch-case-syndrome/
  * @private
  */
 
-var MIDI_RESPONSE = {};
+var MIDI_REQUEST = {};
 
 /**
- * Handles a REPORT_VERSION response and emits the reportversion event.  Also turns on all pins to start reporting
+ * Handles a REPORT_VERSION response and emits the reportversion event.
  * @private
  * @param {Board} board the current arduino board we are working with.
  */
 
-MIDI_RESPONSE[REPORT_VERSION] = function(board) {
-  var versionBytes = new Buffer([ REPORT_VERSION, FIRMWARE_VERSION_MAJOR, FIRMWARE_VERSION_MINOR]);
+MIDI_REQUEST[REPORT_VERSION] = function(board) {
+  var versionBytes = new Buffer([REPORT_VERSION, FIRMWARE_VERSION_MAJOR, FIRMWARE_VERSION_MINOR]);
   board.sp.write(versionBytes);
 };
 
-MIDI_RESPONSE[SYSTEM_RESET] = function(board) {
-  console.log('MIDI_RESPONSE[SYSTEM_RESET]');
+MIDI_REQUEST[SYSTEM_RESET] = function(board) {
+  console.log('MIDI_REQUEST[SYSTEM_RESET]');
   board.io.reset();
+};
+
+MIDI_REQUEST[REPORT_DIGITAL] = function(board) {
+  console.log('MIDI_REQUEST[REPORT_DIGITAL]', board.currentBuffer);
+
+  var port = board.currentBuffer[0] & 0x0F;
+  var value = board.currentBuffer[1];
+
+  for (var i = 0; i < 8; i++) {
+    var pinNumber = 8 * port + i;
+    if(value){
+
+      //only need to register this once.
+      //TODO check if this is the case for IOs other than firmata
+      if(!board.digitalCallbacks[pinNumber]){
+
+        board.digitalCallbacks[pinNumber] = function(data){
+          console.log('digital data message recieved', data);
+
+          //TODO send out digital message to serial port if data changed
+
+          // var msg = Buffer.concat([new Buffer([DIGITAL_MESSAGE | port])
+          // console.log('sending digital to serial', msg);
+          // board.sp.write(msg);
+        };
+
+        board.io.analogRead(pinNumber, board.digitalCallbacks[pinNumber]);
+      }
+
+
+    }else{
+      board.io.reportDigitalPin(pinNumber, reportState);
+    }
+  }
+
+};
+
+MIDI_REQUEST[REPORT_ANALOG] = function(board) {
+
+  var pinNumber = board.currentBuffer[0] - 0xC0;
+  var reportState = board.currentBuffer[1];
+
+  console.log('MIDI_REQUEST[REPORT_ANALOG]', pinNumber, reportState);
+
+
+
+  if(reportState){
+
+    //only need to register this once.
+    //TODO check if this is the case for IOs other than firmata
+    if(!board.analogCallbacks[pinNumber]){
+
+      board.analogCallbacks[pinNumber] = function(data){
+        var msg = Buffer.concat([new Buffer([ANALOG_MESSAGE | pinNumber]) , sendValueAsTwo7bitBytes(data)]);
+        console.log('sending analog to serial', msg);
+        board.sp.write(msg);
+      };
+
+      board.io.analogRead(pinNumber, board.analogCallbacks[pinNumber]);
+    }
+
+
+  }else{
+    board.io.reportAnalogPin(pinNumber, reportState);
+  }
+
+
 };
 
 /**
@@ -112,10 +180,10 @@ MIDI_RESPONSE[SYSTEM_RESET] = function(board) {
  * @param {Board} board the current arduino board we are working with.
  */
 
-MIDI_RESPONSE[ANALOG_MESSAGE] = function(board) {
+MIDI_REQUEST[ANALOG_MESSAGE] = function(board) {
   var value = board.currentBuffer[1] | (board.currentBuffer[2] << 7);
   var pin = board.currentBuffer[0] & 0x0F;
-  //console.log('MIDI_RESPONSE[ANALOG_MESSAGE]', value, pin);
+  //console.log('MIDI_REQUEST[ANALOG_MESSAGE]', value, pin);
   board.io.analogWrite(pin, value);
 };
 
@@ -124,21 +192,21 @@ MIDI_RESPONSE[ANALOG_MESSAGE] = function(board) {
  *
  */
 
-MIDI_RESPONSE[DIGITAL_MESSAGE] = function(board) {
+MIDI_REQUEST[DIGITAL_MESSAGE] = function(board) {
   var port = (board.currentBuffer[0] & 0x0F);
   var portValue = board.currentBuffer[1] | (board.currentBuffer[2] << 7);
 
   //TODO: probably a much more effecient way to do this than string manipulation
   var values = format(portValue).split('').map(function(val){ return parseInt(val,10); }).reverse();
 
-  console.log('MIDI_RESPONSE[DIGITAL_MESSAGE]', board.currentBuffer, port, values);
+  console.log('MIDI_REQUEST[DIGITAL_MESSAGE]', board.currentBuffer, port, values);
 
   for (var i = 0; i < 8; i++) {
     var pinNumber = 8 * port + i;
     var pin = board.io.pins[pinNumber];
     if(pin){
       if(pin.value !== values[i]){
-        console.log('MIDI_RESPONSE[DIGITAL_MESSAGE] writing', pinNumber, values[i]);
+        console.log('MIDI_REQUEST[DIGITAL_MESSAGE] writing', pinNumber, values[i]);
         board.io.digitalWrite(pinNumber, values[i]);
       }
       pin.value = values[i];
@@ -153,13 +221,15 @@ MIDI_RESPONSE[DIGITAL_MESSAGE] = function(board) {
  *
  */
 
-MIDI_RESPONSE[PIN_MODE] = function(board) {
+MIDI_REQUEST[PIN_MODE] = function(board) {
   var pinNumber = board.currentBuffer[1];
   var pinMode = board.currentBuffer[2];
 
+  console.log('MIDI_REQUEST[PIN_MODE]', pinNumber, pinMode);
+
   var pin = board.io.pins[pinNumber];
   if(pin){ //} && board.io.MODES[pinMode]){
-    console.log('MIDI_RESPONSE[PIN_MODE] write');
+    console.log('MIDI_REQUEST[PIN_MODE] write');
     board.io.pins[pinNumber].mode = pinMode;
     board.io.pinMode(pinNumber, pinMode);
   }
@@ -167,12 +237,12 @@ MIDI_RESPONSE[PIN_MODE] = function(board) {
 };
 
 /**
- * SYSEX_RESPONSE contains functions to be called when we receive a SYSEX message from the arduino.
+ * SYSEX_REQUEST contains functions to be called when we receive a SYSEX message from the arduino.
  * used as a switch object as seen here http://james.padolsey.com/javascript/how-to-avoid-switch-case-syndrome/
  * @private
  */
 
-var SYSEX_RESPONSE = {};
+var SYSEX_REQUEST = {};
 
 
 
@@ -204,9 +274,9 @@ function sendValueAsTwo7bitBytes(value){
  * @param {Board} board the current arduino board we are working with.
  */
 
-SYSEX_RESPONSE[QUERY_FIRMWARE] = function(board) {
+SYSEX_REQUEST[QUERY_FIRMWARE] = function(board) {
 
-  console.log('SYSEX_RESPONSE[QUERY_FIRMWARE]');
+  console.log('SYSEX_REQUEST[QUERY_FIRMWARE]');
   var buf = new Buffer([REPORT_VERSION, 2, 3]);
   buf = Buffer.concat([buf, printFirmwareVersion()]);
   console.log('buf', buf);
@@ -215,11 +285,11 @@ SYSEX_RESPONSE[QUERY_FIRMWARE] = function(board) {
 
 
 
-SYSEX_RESPONSE[CAPABILITY_QUERY] = function(board){
+SYSEX_REQUEST[CAPABILITY_QUERY] = function(board){
 
   function writeCapabilites(){
     var output = [START_SYSEX,CAPABILITY_RESPONSE];
-    //console.log('SYSEX_RESPONSE[CAPABILITY_QUERY]', board.io.pins.length);
+    //console.log('SYSEX_REQUEST[CAPABILITY_QUERY]', board.io.pins.length);
     for (var i = 0; i < board.io.pins.length; i++) {
       var pin = board.io.pins[i];
       //console.log(i, JSON.stringify(pin));
@@ -249,7 +319,6 @@ SYSEX_RESPONSE[CAPABILITY_QUERY] = function(board){
     }
     output.push(END_SYSEX);
 
-    //var output = [START_SYSEX,CAPABILITY_RESPONSE,127,127,0,1,1,1,4,14,127,0,1,1,1,3,8,4,14,127,0,1,1,1,4,14,127,0,1,1,1,3,8,4,14,127,0,1,1,1,3,8,4,14,127,0,1,1,1,4,14,127,0,1,1,1,4,14,127,0,1,1,1,3,8,4,14,127,0,1,1,1,3,8,4,14,127,0,1,1,1,3,8,4,14,127,0,1,1,1,4,14,127,0,1,1,1,4,14,127,0,1,1,1,2,10,127,0,1,1,1,2,10,127,0,1,1,1,2,10,127,0,1,1,1,2,10,127,0,1,1,1,2,10,6,1,127,0,1,1,1,2,10,6,1,127,END_SYSEX];
     board.sp.write(new Buffer(output));
   }
 
@@ -257,17 +326,16 @@ SYSEX_RESPONSE[CAPABILITY_QUERY] = function(board){
     writeCapabilites();
   }else{
     board.io.queryCapabilities(function(err, data){
-      //console.log('cap query', err, data, board.io.pins);
       writeCapabilites();
     });
   }
 }
 
 
-SYSEX_RESPONSE[ANALOG_MAPPING_QUERY] = function(board){
+SYSEX_REQUEST[ANALOG_MAPPING_QUERY] = function(board){
 
   function writeMappings(){
-    console.log('SYSEX_RESPONSE[ANALOG_MAPPING_QUERY]');
+    console.log('SYSEX_REQUEST[ANALOG_MAPPING_QUERY]');
 
     var output = [START_SYSEX,ANALOG_MAPPING_RESPONSE];
     for (var i = 0; i < board.io.pins.length; i++) {
@@ -288,6 +356,18 @@ SYSEX_RESPONSE[ANALOG_MAPPING_QUERY] = function(board){
 
 }
 
+SYSEX_REQUEST[SAMPLING_INTERVAL] = function(board){
+  var value = board.currentBuffer[2] | (board.currentBuffer[3] << 7);
+
+  console.log('SYSEX_REQUEST[SAMPLING_INTERVAL]', board.currentBuffer, 'value', value);
+
+  if(board.io.setSamplingInterval){
+    board.io.setSamplingInterval(value);
+  }else{
+    console.log('io does not support setSamplingInterval');
+  }
+}
+
 
 /**
  * Handles a PIN_STATE response and emits the 'pin-state-'+n event where n is the pin number.
@@ -299,8 +379,8 @@ SYSEX_RESPONSE[ANALOG_MAPPING_QUERY] = function(board){
  * @param {Board} board the current arduino board we are working with.
  */
 
-SYSEX_RESPONSE[PIN_STATE_QUERY] = function (board) {
-  console.log('SYSEX_RESPONSE[PIN_STATE_QUERY] not implemented', board.currentBuffer);
+SYSEX_REQUEST[PIN_STATE_QUERY] = function (board) {
+  console.log('SYSEX_REQUEST[PIN_STATE_QUERY] not implemented', board.currentBuffer);
 
   //TODO - handle this
 
@@ -325,41 +405,55 @@ SYSEX_RESPONSE[PIN_STATE_QUERY] = function (board) {
  * @param {Board} board the current arduino board we are working with.
  */
 
-SYSEX_RESPONSE[I2C_REPLY] = function(board) {
-  var replyBuffer = [];
-  var slaveAddress = (board.currentBuffer[2] & 0x7F) | ((board.currentBuffer[3] & 0x7F) << 7);
-  var register = (board.currentBuffer[4] & 0x7F) | ((board.currentBuffer[5] & 0x7F) << 7);
-  for (var i = 6, length = board.currentBuffer.length - 1; i < length; i += 2) {
-    replyBuffer.push(board.currentBuffer[i] | (board.currentBuffer[i + 1] << 7));
-  }
-  board.emit("I2C-reply-" + slaveAddress, replyBuffer);
+SYSEX_REQUEST[I2C_REPLY] = function(board) {
+  console.log('SYSEX_REQUEST[I2C_REPLY] not implemented yet');
+  //TODO handle this
+
+  // var replyBuffer = [];
+  // var slaveAddress = (board.currentBuffer[2] & 0x7F) | ((board.currentBuffer[3] & 0x7F) << 7);
+  // var register = (board.currentBuffer[4] & 0x7F) | ((board.currentBuffer[5] & 0x7F) << 7);
+  // for (var i = 6, length = board.currentBuffer.length - 1; i < length; i += 2) {
+  //   replyBuffer.push(board.currentBuffer[i] | (board.currentBuffer[i + 1] << 7));
+  // }
+  // board.emit("I2C-reply-" + slaveAddress, replyBuffer);
 };
 
-SYSEX_RESPONSE[ONEWIRE_DATA] = function(board) {
-  var subCommand = board.currentBuffer[2];
+SYSEX_REQUEST[ONEWIRE_DATA] = function(board) {
+  console.log('SYSEX_REQUEST[ONEWIRE_DATA] not implemented yet');
+  //TODO handle this
 
-  if (!SYSEX_RESPONSE[subCommand]) {
-    return;
-  }
+  // var subCommand = board.currentBuffer[2];
 
-  SYSEX_RESPONSE[subCommand](board);
+  // if (!SYSEX_REQUEST[subCommand]) {
+  //   return;
+  // }
+
+  // SYSEX_REQUEST[subCommand](board);
 };
 
-SYSEX_RESPONSE[ONEWIRE_SEARCH_REPLY] = function(board) {
-  var pin = board.currentBuffer[3];
-  var replyBuffer = board.currentBuffer.slice(4, board.currentBuffer.length - 1);
+SYSEX_REQUEST[ONEWIRE_SEARCH_REPLY] = function(board) {
+  console.log('SYSEX_REQUEST[ONEWIRE_SEARCH_REPLY] not implemented yet');
+  //TODO handle this
 
-  board.emit("1-wire-search-reply-" + pin, OneWireUtils.readDevices(replyBuffer));
+  // var pin = board.currentBuffer[3];
+  // var replyBuffer = board.currentBuffer.slice(4, board.currentBuffer.length - 1);
+
+  // board.emit("1-wire-search-reply-" + pin, OneWireUtils.readDevices(replyBuffer));
 };
 
-SYSEX_RESPONSE[ONEWIRE_SEARCH_ALARMS_REPLY] = function(board) {
-  var pin = board.currentBuffer[3];
-  var replyBuffer = board.currentBuffer.slice(4, board.currentBuffer.length - 1);
+SYSEX_REQUEST[ONEWIRE_SEARCH_ALARMS_REPLY] = function(board) {
+  console.log('SYSEX_REQUEST[ONEWIRE_SEARCH_ALARMS_REPLY] not implemented yet');
+  //TODO handle this
 
-  board.emit("1-wire-search-alarms-reply-" + pin, OneWireUtils.readDevices(replyBuffer));
+  // var pin = board.currentBuffer[3];
+  // var replyBuffer = board.currentBuffer.slice(4, board.currentBuffer.length - 1);
+
+  // board.emit("1-wire-search-alarms-reply-" + pin, OneWireUtils.readDevices(replyBuffer));
 };
 
-SYSEX_RESPONSE[ONEWIRE_READ_REPLY] = function(board) {
+SYSEX_REQUEST[ONEWIRE_READ_REPLY] = function(board) {
+  console.log('SYSEX_REQUEST[ONEWIRE_READ_REPLY] not implemented yet');
+  //TODO handle this
 
   // var encoded = board.currentBuffer.slice(4, board.currentBuffer.length - 1);
   // var decoded = Encoder7Bit.from7BitArray(encoded);
@@ -374,25 +468,31 @@ SYSEX_RESPONSE[ONEWIRE_READ_REPLY] = function(board) {
  * @param {Board} board the current arduino board we are working with.
  */
 
-SYSEX_RESPONSE[STRING_DATA] = function(board) {
-  var string = new Buffer(board.currentBuffer.slice(2, -1)).toString("utf8").replace(/\0/g, "");
-  board.emit("string", string);
+SYSEX_REQUEST[STRING_DATA] = function(board) {
+  console.log('SYSEX_REQUEST[STRING_DATA] not implemented yet');
+  //TODO handle this
+
+  // var string = new Buffer(board.currentBuffer.slice(2, -1)).toString("utf8").replace(/\0/g, "");
+  // board.emit("string", string);
 };
 
 /**
  * Response from pulseIn
  */
 
-SYSEX_RESPONSE[PULSE_IN] = function(board) {
-  var pin = (board.currentBuffer[2] & 0x7F) | ((board.currentBuffer[3] & 0x7F) << 7);
-  var durationBuffer = [
-    (board.currentBuffer[4] & 0x7F) | ((board.currentBuffer[5] & 0x7F) << 7), (board.currentBuffer[6] & 0x7F) | ((board.currentBuffer[7] & 0x7F) << 7), (board.currentBuffer[8] & 0x7F) | ((board.currentBuffer[9] & 0x7F) << 7), (board.currentBuffer[10] & 0x7F) | ((board.currentBuffer[11] & 0x7F) << 7)
-  ];
-  var duration = ((durationBuffer[0] << 24) +
-    (durationBuffer[1] << 16) +
-    (durationBuffer[2] << 8) +
-    (durationBuffer[3]));
-  board.emit("pulse-in-" + pin, duration);
+SYSEX_REQUEST[PULSE_IN] = function(board) {
+  console.log('SYSEX_REQUEST[PULSE_IN] not implemented yet');
+  //TODO handle this
+
+  // var pin = (board.currentBuffer[2] & 0x7F) | ((board.currentBuffer[3] & 0x7F) << 7);
+  // var durationBuffer = [
+  //   (board.currentBuffer[4] & 0x7F) | ((board.currentBuffer[5] & 0x7F) << 7), (board.currentBuffer[6] & 0x7F) | ((board.currentBuffer[7] & 0x7F) << 7), (board.currentBuffer[8] & 0x7F) | ((board.currentBuffer[9] & 0x7F) << 7), (board.currentBuffer[10] & 0x7F) | ((board.currentBuffer[11] & 0x7F) << 7)
+  // ];
+  // var duration = ((durationBuffer[0] << 24) +
+  //   (durationBuffer[1] << 16) +
+  //   (durationBuffer[2] << 8) +
+  //   (durationBuffer[3]));
+  // board.emit("pulse-in-" + pin, duration);
 };
 
 
@@ -400,8 +500,10 @@ SYSEX_RESPONSE[PULSE_IN] = function(board) {
  * Request for a pulse
  */
 
-SYSEX_RESPONSE[PULSE_OUT] = function(board) {
-  //TODO - handle this
+SYSEX_REQUEST[PULSE_OUT] = function(board) {
+  console.log('SYSEX_REQUEST[PULSE_OUT] not implemented yet');
+  //TODO handle this
+
 };
 
 /**
@@ -409,9 +511,12 @@ SYSEX_RESPONSE[PULSE_OUT] = function(board) {
  * @param {Board} board
  */
 
-SYSEX_RESPONSE[STEPPER] = function(board) {
-  var deviceNum = board.currentBuffer[2];
-  board.emit("stepper-done-" + deviceNum, true);
+SYSEX_REQUEST[STEPPER] = function(board) {
+  console.log('SYSEX_REQUEST[STEPPER] not implemented yet');
+  //TODO handle this
+
+  // var deviceNum = board.currentBuffer[2];
+  // board.emit("stepper-done-" + deviceNum, true);
 };
 
 
@@ -419,10 +524,15 @@ SYSEX_RESPONSE[STEPPER] = function(board) {
 
 
 function IOClient(options) {
+  this.name = IO_NAME;
   this.io = options.io;
   this.sp = options.serial;
 
   this.currentBuffer = [];
+
+  this.analogCallbacks = [];
+  this.digitalCallbacks = [];
+
   var self = this;
 
 
@@ -447,7 +557,7 @@ function IOClient(options) {
         if (i === 0 && _.contains([REPORT_VERSION, SYSTEM_RESET], byt)) {
           console.log('one byte command', new Buffer([byt]));
           try{
-            MIDI_RESPONSE[byt](self);
+            MIDI_REQUEST[byt](self);
           }catch(err){
             console.log('error running one byte command: ' + new Buffer([byt]), err );
           }
@@ -464,10 +574,10 @@ function IOClient(options) {
           self.currentBuffer[self.currentBuffer.length - 1] === END_SYSEX) {
 
 
-          if(SYSEX_RESPONSE[self.currentBuffer[1]]){
+          if(SYSEX_REQUEST[self.currentBuffer[1]]){
             console.log('handling sysex', new Buffer(self.currentBuffer), new Buffer([self.currentBuffer[1], QUERY_FIRMWARE]));
             try{
-              SYSEX_RESPONSE[self.currentBuffer[1]](self);
+              SYSEX_REQUEST[self.currentBuffer[1]](self);
             }catch(exp){
               console.log('error handling sysex', exp);
             }
@@ -494,6 +604,27 @@ function IOClient(options) {
           }
         }
 
+
+        // There are 2 bytes in the buffer and the first is not START_SYSEX:
+        // Might have a 2 byte Command
+        if (self.currentBuffer.length === 2 && self.currentBuffer[0] !== START_SYSEX) {
+          console.log('2 byte check', self.currentBuffer);
+          try{
+            if(self.currentBuffer[0] >= 0xC0 && self.currentBuffer[0] <= 0xCF){
+              MIDI_REQUEST[REPORT_ANALOG](self);
+              self.currentBuffer.length = 0;
+            }
+            else if(self.currentBuffer[0] >= 0xD0 && self.currentBuffer[0] <= 0xDF){
+              MIDI_REQUEST[REPORT_DIGITAL](self);
+              self.currentBuffer.length = 0;
+          }
+          }catch(exp){
+            console.log('err handling reports', exp);
+          }
+
+        }
+
+
         // There are 3 bytes in the buffer and the first is not START_SYSEX:
         // Might have a MIDI Command
         if (self.currentBuffer.length === 3 && self.currentBuffer[0] !== START_SYSEX) {
@@ -506,13 +637,13 @@ function IOClient(options) {
 
           //console.log('MIDI?', cmd);
 
-          if (MIDI_RESPONSE[cmd]) {
+          if (MIDI_REQUEST[cmd]) {
             console.log('MIDI', cmd);
             try{
-              MIDI_RESPONSE[cmd](self);
+              MIDI_REQUEST[cmd](self);
             }
             catch(err){
-              console.log('error handling MIDI_RESPONSE', cmd, err);
+              console.log('error handling MIDI_REQUEST', cmd, err);
             }
             self.currentBuffer.length = 0;
           } else {
