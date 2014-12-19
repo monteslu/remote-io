@@ -207,7 +207,11 @@ MIDI_REQUEST[DIGITAL_MESSAGE] = function(board) {
     if(pin){
       if(pin.value !== values[i]){
         console.log('MIDI_REQUEST[DIGITAL_MESSAGE] writing', pinNumber, values[i]);
-        board.io.digitalWrite(pinNumber, values[i]);
+        try{
+          board.io.digitalWrite(pinNumber, values[i]);
+        }catch(exp){
+          console.log('error digitalWriting', pinNumber, values[i], exp);
+        }
       }
       pin.value = values[i];
     }
@@ -230,7 +234,7 @@ MIDI_REQUEST[PIN_MODE] = function(board) {
   var pin = board.io.pins[pinNumber];
   if(pin){ //} && board.io.MODES[pinMode]){
     console.log('MIDI_REQUEST[PIN_MODE] write');
-    board.io.pins[pinNumber].mode = pinMode;
+    //board.io.pins[pinNumber].mode = pinMode;
     board.io.pinMode(pinNumber, pinMode);
   }
 
