@@ -1,5 +1,7 @@
 # Remote-io
 
+[![Join the chat at https://gitter.im/monteslu/remote-io](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/monteslu/remote-io?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
+
 Remote-io is a Firmata-compatibility IO class for writing [nodebot](http://nodebots.io/) programs and provides remote interaction with any other [Johnny-Five](https://github.com/rwaldron/johnny-five) capable IO class.
 
 Remote-io was built at [IcedDev](http://iceddev.com/)
