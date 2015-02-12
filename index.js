@@ -372,6 +372,20 @@ SYSEX_REQUEST[SAMPLING_INTERVAL] = function(board){
   }
 }
 
+SYSEX_REQUEST[SERVO_CONFIG] = function(board){
+  var pin = board.currentBuffer[2];
+  var min = board.currentBuffer[3] | (board.currentBuffer[4] << 7);
+  var max = board.currentBuffer[5] | (board.currentBuffer[6] << 7);
+
+  console.log('SYSEX_REQUEST[SERVO_CONFIG] pin', pin, 'min', min, 'max', max);
+
+  if(board.io.servoConfig){
+    board.io.servoConfig(pin, min, max);
+  }else{
+    console.log('io does not support servoConfig');
+  }
+}
+
 
 /**
  * Handles a PIN_STATE response and emits the 'pin-state-'+n event where n is the pin number.
@@ -420,6 +434,42 @@ SYSEX_REQUEST[I2C_REPLY] = function(board) {
   //   replyBuffer.push(board.currentBuffer[i] | (board.currentBuffer[i + 1] << 7));
   // }
   // board.emit("I2C-reply-" + slaveAddress, replyBuffer);
+};
+
+
+SYSEX_REQUEST[I2C_REPLY] = function(board) {
+  console.log('SYSEX_REQUEST[I2C_REPLY] not implemented yet');
+  //TODO handle this
+
+  // var replyBuffer = [];
+  // var slaveAddress = (board.currentBuffer[2] & 0x7F) | ((board.currentBuffer[3] & 0x7F) << 7);
+  // var register = (board.currentBuffer[4] & 0x7F) | ((board.currentBuffer[5] & 0x7F) << 7);
+  // for (var i = 6, length = board.currentBuffer.length - 1; i < length; i += 2) {
+  //   replyBuffer.push(board.currentBuffer[i] | (board.currentBuffer[i + 1] << 7));
+  // }
+  // board.emit("I2C-reply-" + slaveAddress, replyBuffer);
+};
+
+
+SYSEX_REQUEST[I2C_REQUEST] = function(board) {
+  console.log('SYSEX_REQUEST[I2C_REQUEST] not implemented yet', board.currentBuffer);
+  //TODO handle this
+
+  // var replyBuffer = [];
+  // var slaveAddress = (board.currentBuffer[2] & 0x7F) | ((board.currentBuffer[3] & 0x7F) << 7);
+  // var register = (board.currentBuffer[4] & 0x7F) | ((board.currentBuffer[5] & 0x7F) << 7);
+  // for (var i = 6, length = board.currentBuffer.length - 1; i < length; i += 2) {
+  //   replyBuffer.push(board.currentBuffer[i] | (board.currentBuffer[i + 1] << 7));
+  // }
+  // board.emit("I2C-reply-" + slaveAddress, replyBuffer);
+};
+
+SYSEX_REQUEST[I2C_CONFIG] = function(board) {
+  var value = board.currentBuffer[2] | (board.currentBuffer[3] << 7);
+  console.log('SYSEX_REQUEST[I2C_CONFIG] delay', value);
+  if(board.io.sendI2CConfig){
+    board.io.sendI2CConfig(value);
+  }
 };
 
 SYSEX_REQUEST[ONEWIRE_DATA] = function(board) {
