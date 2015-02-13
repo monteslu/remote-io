@@ -386,6 +386,21 @@ SYSEX_REQUEST[SERVO_CONFIG] = function(board){
   }
 }
 
+SYSEX_REQUEST[EXTENDED_ANALOG] = function(board){
+  var pin = board.currentBuffer[2];
+  var value = board.currentBuffer[3]; // | (board.currentBuffer[4] << 7);
+
+  var MSBs = board.currentBuffer.length - 5;
+
+  for (var i = 0; i < MSBs; i++) {
+    value = value | board.currentBuffer[4 + i] << ((i + 1) * 7);
+  }
+
+  console.log('SYSEX_REQUEST[EXTENDED_ANALOG] pin', pin, 'value', value);
+
+  board.io.analogWrite(pin, value);
+}
+
 
 /**
  * Handles a PIN_STATE response and emits the 'pin-state-'+n event where n is the pin number.
@@ -638,7 +653,7 @@ function IOClient(options) {
             console.log('handled');
           }
           else{
-            console.log('unhanled sysex', self.currentBuffer)
+            console.log('unhandled SYSEX', self.currentBuffer)
           }
           self.currentBuffer = [];
 
