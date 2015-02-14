@@ -79,7 +79,12 @@ var MODES = {
   UNKOWN: 0x10
 };
 
-
+var I2C_MODES = {
+  WRITE: 0x00,
+  READ: 1,
+  CONTINUOUS_READ: 2,
+  STOP_READING: 3
+};
 
 
 
@@ -430,60 +435,107 @@ SYSEX_REQUEST[PIN_STATE_QUERY] = function (board) {
 };
 
 
-
-/**
- * Handles a I2C_REPLY response and emits the "I2C-reply-"+n event where n is the slave address of the I2C device.
- * The event is passed the buffer of data sent from the I2C Device
- * @private
- * @param {Board} board the current arduino board we are working with.
- */
-
 SYSEX_REQUEST[I2C_REPLY] = function(board) {
-  console.log('SYSEX_REQUEST[I2C_REPLY] not implemented yet');
-  //TODO handle this
-
-  // var replyBuffer = [];
-  // var slaveAddress = (board.currentBuffer[2] & 0x7F) | ((board.currentBuffer[3] & 0x7F) << 7);
-  // var register = (board.currentBuffer[4] & 0x7F) | ((board.currentBuffer[5] & 0x7F) << 7);
-  // for (var i = 6, length = board.currentBuffer.length - 1; i < length; i += 2) {
-  //   replyBuffer.push(board.currentBuffer[i] | (board.currentBuffer[i + 1] << 7));
-  // }
-  // board.emit("I2C-reply-" + slaveAddress, replyBuffer);
-};
-
-
-SYSEX_REQUEST[I2C_REPLY] = function(board) {
-  console.log('SYSEX_REQUEST[I2C_REPLY] not implemented yet');
-  //TODO handle this
-
-  // var replyBuffer = [];
-  // var slaveAddress = (board.currentBuffer[2] & 0x7F) | ((board.currentBuffer[3] & 0x7F) << 7);
-  // var register = (board.currentBuffer[4] & 0x7F) | ((board.currentBuffer[5] & 0x7F) << 7);
-  // for (var i = 6, length = board.currentBuffer.length - 1; i < length; i += 2) {
-  //   replyBuffer.push(board.currentBuffer[i] | (board.currentBuffer[i + 1] << 7));
-  // }
-  // board.emit("I2C-reply-" + slaveAddress, replyBuffer);
+  console.log('SYSEX_REQUEST[I2C_REPLY] not implemented', board.currentBuffer);
 };
 
 
 SYSEX_REQUEST[I2C_REQUEST] = function(board) {
-  console.log('SYSEX_REQUEST[I2C_REQUEST] not implemented yet', board.currentBuffer);
-  //TODO handle this
 
-  // var replyBuffer = [];
-  // var slaveAddress = (board.currentBuffer[2] & 0x7F) | ((board.currentBuffer[3] & 0x7F) << 7);
-  // var register = (board.currentBuffer[4] & 0x7F) | ((board.currentBuffer[5] & 0x7F) << 7);
-  // for (var i = 6, length = board.currentBuffer.length - 1; i < length; i += 2) {
-  //   replyBuffer.push(board.currentBuffer[i] | (board.currentBuffer[i + 1] << 7));
-  // }
-  // board.emit("I2C-reply-" + slaveAddress, replyBuffer);
+  var address = board.currentBuffer[2];
+  var mode = board.currentBuffer[3] >> 3;
+  var byteLength = (board.currentBuffer.length - 5) / 2;
+
+  var data = [];
+  for (var i = 0; i < byteLength; i++) {
+    data.push(board.currentBuffer[(i * 2) + 4] | (board.currentBuffer[(i * 2) + 5] << 7));
+  }
+
+  console.log('SYSEX_REQUEST[I2C_REQUEST]', 'address', address, 'mode', mode, 'byteLength', byteLength, 'data', data);
+
+  if(mode === I2C_MODES.WRITE){
+    if(board.io.i2cWrite){
+      board.io.i2cWrite(address, data);
+    }else{
+      console.log('board does not support i2cWrite');
+    }
+
+  }else if(mode === I2C_MODES.READ){
+    console.log('SYSEX_REQUEST[I2C_REQUEST] READ not implemented yet', board.currentBuffer);
+
+    if(board.io.i2cReadOnce){
+      var register = data[0];
+      var numBytes = data[1];
+      board.io.i2cReadOnce(address, register, numBytes, function(resp){
+
+        var reply = [
+          START_SYSEX,
+          I2C_REPLY,
+          address & 0x7f,
+          address >> 7 & 0x7f,
+          register & 0x7f,
+          register >> 7 & 0x7f
+        ];
+
+        for (var i = 0; i < resp.length; i++) {
+          reply.push(resp[i] & 0x7f)
+          reply.push(resp[i] >> 7 & 0x7f);
+        }
+
+        reply.push(END_SYSEX);
+
+        var buf = new Buffer(reply);
+
+        board.sp.write(buf);
+
+      });
+    }else{
+      console.log('board does not support i2cReadOnce');
+    }
+
+
+  }else if(mode === I2C_MODES.CONTINUOUS_READ){
+    if(board.io.i2cRead){
+      var register = data[0];
+      var numBytes = data[1];
+      board.io.i2cRead(address, register, numBytes, function(resp){
+
+        var reply = [
+          START_SYSEX,
+          I2C_REPLY,
+          address & 0x7f,
+          address >> 7 & 0x7f,
+          register & 0x7f,
+          register >> 7 & 0x7f
+        ];
+
+        for (var i = 0; i < resp.length; i++) {
+          reply.push(resp[i] & 0x7f)
+          reply.push(resp[i] >> 7 & 0x7f);
+        }
+
+        reply.push(END_SYSEX);
+
+        var buf = new Buffer(reply);
+
+        board.sp.write(buf);
+
+      });
+    }else{
+      console.log('board does not support i2cRead');
+    }
+
+  }else if(mode === I2C_MODES.STOP_READING){
+    console.log('SYSEX_REQUEST[I2C_REQUEST] READ not implemented yet', board.currentBuffer);
+  }
+
 };
 
 SYSEX_REQUEST[I2C_CONFIG] = function(board) {
   var value = board.currentBuffer[2] | (board.currentBuffer[3] << 7);
   console.log('SYSEX_REQUEST[I2C_CONFIG] delay', value);
-  if(board.io.sendI2CConfig){
-    board.io.sendI2CConfig(value);
+  if(board.io.i2cConfig){
+    board.io.i2cConfig(value);
   }
 };
 
