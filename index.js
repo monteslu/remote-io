@@ -2,7 +2,7 @@
 
 var util = require('util');
 var EventEmitter = require('events').EventEmitter;
-var _ = require('lodash');
+var includes = require('lodash.includes');
 
 var FIRMWARE_NAME = 'VirtualFirmata';
 var FIRMWARE_VERSION_MAJOR = 2;
@@ -302,25 +302,25 @@ SYSEX_REQUEST[CAPABILITY_QUERY] = function(board){
     for (var i = 0; i < board.io.pins.length; i++) {
       var pin = board.io.pins[i];
       //console.log(i, JSON.stringify(pin));
-      if (_.contains(pin.supportedModes, MODES.OUTPUT)) {
+      if (includes(pin.supportedModes, MODES.OUTPUT)) {
         output.push(MODES.INPUT);
         output.push(1);
         output.push(MODES.OUTPUT);
         output.push(1);
       }
-      if (_.contains(pin.supportedModes, MODES.ANALOG)) {
+      if (includes(pin.supportedModes, MODES.ANALOG)) {
         output.push(MODES.ANALOG);
         output.push(10);
       }
-      if (_.contains(pin.supportedModes, MODES.PWM)) {
+      if (includes(pin.supportedModes, MODES.PWM)) {
         output.push(MODES.PWM);
         output.push(8);
       }
-      if (_.contains(pin.supportedModes, MODES.SERVO)) {
+      if (includes(pin.supportedModes, MODES.SERVO)) {
         output.push(MODES.SERVO);
         output.push(14);
       }
-      if (_.contains(pin.supportedModes, MODES.I2C)) {
+      if (includes(pin.supportedModes, MODES.I2C)) {
         output.push(MODES.I2C);
         output.push(1);  // to do: determine appropriate value
       }
@@ -675,7 +675,7 @@ function IOClient(options) {
         continue;
       } else {
 
-        if (i === 0 && _.contains([REPORT_VERSION, SYSTEM_RESET], byt)) {
+        if (i === 0 && includes([REPORT_VERSION, SYSTEM_RESET], byt)) {
           console.log('one byte command', new Buffer([byt]));
           try{
             MIDI_REQUEST[byt](self);

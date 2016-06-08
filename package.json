@@ -1,6 +1,6 @@
 {
   "name": "remote-io",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "remote control any io plugin via firmata",
   "main": "index.js",
   "scripts": {
@@ -15,7 +15,8 @@
     "johnny-five",
     "io-plugin",
     "mqtt",
-    "socket.io"
+    "socket.io",
+    "iot"
   ],
   "author": "Luis Montes",
   "license": "MIT",
@@ -24,6 +25,6 @@
   },
   "homepage": "https://github.com/monteslu/remote-io",
   "dependencies": {
-    "lodash": "^2.4.1"
+    "lodash.includes": "^4.1.3"
   }
 }
