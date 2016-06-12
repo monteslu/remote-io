@@ -1,6 +1,6 @@
 {
   "name": "remote-io",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "description": "remote control any io plugin via firmata",
   "main": "index.js",
   "scripts": {
@@ -25,6 +25,7 @@
   },
   "homepage": "https://github.com/monteslu/remote-io",
   "dependencies": {
+    "debug": "^2.2.0",
     "lodash.includes": "^4.1.3"
   }
 }

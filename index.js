@@ -3,6 +3,7 @@
 var util = require('util');
 var EventEmitter = require('events').EventEmitter;
 var includes = require('lodash.includes');
+var debug = require('debug')('remote-io');
 
 var FIRMWARE_NAME = 'VirtualFirmata';
 var FIRMWARE_VERSION_MAJOR = 2;
@@ -108,12 +109,12 @@ MIDI_REQUEST[REPORT_VERSION] = function(board) {
 };
 
 MIDI_REQUEST[SYSTEM_RESET] = function(board) {
-  console.log('MIDI_REQUEST[SYSTEM_RESET]');
+  debug('MIDI_REQUEST[SYSTEM_RESET]');
   board.io.reset();
 };
 
 MIDI_REQUEST[REPORT_DIGITAL] = function(board) {
-  console.log('MIDI_REQUEST[REPORT_DIGITAL]', board.currentBuffer);
+  debug('MIDI_REQUEST[REPORT_DIGITAL]', board.currentBuffer);
 
   var port = board.currentBuffer[0] & 0x0F;
   var value = board.currentBuffer[1];
@@ -127,12 +128,12 @@ MIDI_REQUEST[REPORT_DIGITAL] = function(board) {
       if(!board.digitalCallbacks[pinNumber]){
 
         board.digitalCallbacks[pinNumber] = function(data){
-          console.log('digital data message recieved', data);
+          debug('digital data message recieved', data);
 
           //TODO send out digital message to serial port if data changed
 
           // var msg = Buffer.concat([new Buffer([DIGITAL_MESSAGE | port])
-          // console.log('sending digital to serial', msg);
+          // debug('sending digital to serial', msg);
           // board.sp.write(msg);
         };
 
@@ -152,7 +153,7 @@ MIDI_REQUEST[REPORT_ANALOG] = function(board) {
   var pinNumber = board.currentBuffer[0] - 0xC0;
   var reportState = board.currentBuffer[1];
 
-  console.log('MIDI_REQUEST[REPORT_ANALOG]', pinNumber, reportState);
+  debug('MIDI_REQUEST[REPORT_ANALOG]', pinNumber, reportState);
 
 
 
@@ -164,7 +165,7 @@ MIDI_REQUEST[REPORT_ANALOG] = function(board) {
 
       board.analogCallbacks[pinNumber] = function(data){
         var msg = Buffer.concat([new Buffer([ANALOG_MESSAGE | pinNumber]) , sendValueAsTwo7bitBytes(data)]);
-        console.log('sending analog to serial', msg);
+        debug('sending analog to serial', msg);
         board.sp.write(msg);
       };
 
@@ -188,7 +189,7 @@ MIDI_REQUEST[REPORT_ANALOG] = function(board) {
 MIDI_REQUEST[ANALOG_MESSAGE] = function(board) {
   var value = board.currentBuffer[1] | (board.currentBuffer[2] << 7);
   var pin = board.currentBuffer[0] & 0x0F;
-  //console.log('MIDI_REQUEST[ANALOG_MESSAGE]', value, pin);
+  //debug('MIDI_REQUEST[ANALOG_MESSAGE]', value, pin);
   board.io.analogWrite(pin, value);
 };
 
@@ -204,18 +205,18 @@ MIDI_REQUEST[DIGITAL_MESSAGE] = function(board) {
   //TODO: probably a much more effecient way to do this than string manipulation
   var values = format(portValue).split('').map(function(val){ return parseInt(val,10); }).reverse();
 
-  console.log('MIDI_REQUEST[DIGITAL_MESSAGE]', board.currentBuffer, port, values);
+  debug('MIDI_REQUEST[DIGITAL_MESSAGE]', board.currentBuffer, port, values);
 
   for (var i = 0; i < 8; i++) {
     var pinNumber = 8 * port + i;
     var pin = board.io.pins[pinNumber];
     if(pin){
       if(pin.value !== values[i]){
-        console.log('MIDI_REQUEST[DIGITAL_MESSAGE] writing', pinNumber, values[i]);
+        debug('MIDI_REQUEST[DIGITAL_MESSAGE] writing', pinNumber, values[i]);
         try{
           board.io.digitalWrite(pinNumber, values[i]);
         }catch(exp){
-          console.log('error digitalWriting', pinNumber, values[i], exp);
+          debug('error digitalWriting', pinNumber, values[i], exp);
         }
       }
       pin.value = values[i];
@@ -234,11 +235,11 @@ MIDI_REQUEST[PIN_MODE] = function(board) {
   var pinNumber = board.currentBuffer[1];
   var pinMode = board.currentBuffer[2];
 
-  console.log('MIDI_REQUEST[PIN_MODE]', pinNumber, pinMode);
+  debug('MIDI_REQUEST[PIN_MODE]', pinNumber, pinMode);
 
   var pin = board.io.pins[pinNumber];
   if(pin){ //} && board.io.MODES[pinMode]){
-    console.log('MIDI_REQUEST[PIN_MODE] write');
+    debug('MIDI_REQUEST[PIN_MODE] write');
     //board.io.pins[pinNumber].mode = pinMode;
     board.io.pinMode(pinNumber, pinMode);
   }
@@ -257,16 +258,16 @@ var SYSEX_REQUEST = {};
 
 function printFirmwareVersion(){
   var buf = new Buffer([START_SYSEX,QUERY_FIRMWARE, FIRMWARE_VERSION_MAJOR, FIRMWARE_VERSION_MINOR]);
-  console.log(buf.length, 'fwv', buf.toString('hex'));
+  debug(buf.length, 'fwv', buf.toString('hex'));
   for (var i = 0; i < FIRMWARE_NAME.length; i++) {
-    //console.log('FIRMWARE_NAME.charCodeAt(i)', i, FIRMWARE_NAME.charCodeAt(i));
+    //debug('FIRMWARE_NAME.charCodeAt(i)', i, FIRMWARE_NAME.charCodeAt(i));
     buf = Buffer.concat([buf, sendValueAsTwo7bitBytes(FIRMWARE_NAME.charCodeAt(i)) ]);
-    // console.log(buf.length, 'fwv', buf.toString('hex'));
+    // debug(buf.length, 'fwv', buf.toString('hex'));
   };
   //buf.write(new Buffer(END_SYSEX));
   buf = Buffer.concat([buf, new Buffer([END_SYSEX])]);
 
-  console.log(buf.length, 'fwv', buf.toString('hex'));
+  debug(buf.length, 'fwv', buf.toString('hex'));
   return buf;
 
 }
@@ -285,10 +286,10 @@ function sendValueAsTwo7bitBytes(value){
 
 SYSEX_REQUEST[QUERY_FIRMWARE] = function(board) {
 
-  console.log('SYSEX_REQUEST[QUERY_FIRMWARE]');
+  debug('SYSEX_REQUEST[QUERY_FIRMWARE]');
   var buf = new Buffer([REPORT_VERSION, 2, 3]);
   buf = Buffer.concat([buf, printFirmwareVersion()]);
-  console.log('buf', buf);
+  debug('buf', buf);
   board.sp.write(buf);
 };
 
@@ -298,10 +299,10 @@ SYSEX_REQUEST[CAPABILITY_QUERY] = function(board){
 
   function writeCapabilites(){
     var output = [START_SYSEX,CAPABILITY_RESPONSE];
-    //console.log('SYSEX_REQUEST[CAPABILITY_QUERY]', board.io.pins.length);
+    //debug('SYSEX_REQUEST[CAPABILITY_QUERY]', board.io.pins.length);
     for (var i = 0; i < board.io.pins.length; i++) {
       var pin = board.io.pins[i];
-      //console.log(i, JSON.stringify(pin));
+      //debug(i, JSON.stringify(pin));
       if (includes(pin.supportedModes, MODES.OUTPUT)) {
         output.push(MODES.INPUT);
         output.push(1);
@@ -344,7 +345,7 @@ SYSEX_REQUEST[CAPABILITY_QUERY] = function(board){
 SYSEX_REQUEST[ANALOG_MAPPING_QUERY] = function(board){
 
   function writeMappings(){
-    console.log('SYSEX_REQUEST[ANALOG_MAPPING_QUERY]');
+    debug('SYSEX_REQUEST[ANALOG_MAPPING_QUERY]');
 
     var output = [START_SYSEX,ANALOG_MAPPING_RESPONSE];
     for (var i = 0; i < board.io.pins.length; i++) {
@@ -354,7 +355,7 @@ SYSEX_REQUEST[ANALOG_MAPPING_QUERY] = function(board){
     output.push(END_SYSEX);
 
     board.sp.write(new Buffer(output));
-    console.log('ANALOG_MAPPING_QUERY done');
+    debug('ANALOG_MAPPING_QUERY done');
   }
 
   if(board.io.queryAnalogMapping){
@@ -368,12 +369,12 @@ SYSEX_REQUEST[ANALOG_MAPPING_QUERY] = function(board){
 SYSEX_REQUEST[SAMPLING_INTERVAL] = function(board){
   var value = board.currentBuffer[2] | (board.currentBuffer[3] << 7);
 
-  console.log('SYSEX_REQUEST[SAMPLING_INTERVAL]', board.currentBuffer, 'value', value);
+  debug('SYSEX_REQUEST[SAMPLING_INTERVAL]', board.currentBuffer, 'value', value);
 
   if(board.io.setSamplingInterval){
     board.io.setSamplingInterval(value);
   }else{
-    console.log('io does not support setSamplingInterval');
+    debug('io does not support setSamplingInterval');
   }
 }
 
@@ -382,12 +383,12 @@ SYSEX_REQUEST[SERVO_CONFIG] = function(board){
   var min = board.currentBuffer[3] | (board.currentBuffer[4] << 7);
   var max = board.currentBuffer[5] | (board.currentBuffer[6] << 7);
 
-  console.log('SYSEX_REQUEST[SERVO_CONFIG] pin', pin, 'min', min, 'max', max);
+  debug('SYSEX_REQUEST[SERVO_CONFIG] pin', pin, 'min', min, 'max', max);
 
   if(board.io.servoConfig){
     board.io.servoConfig(pin, min, max);
   }else{
-    console.log('io does not support servoConfig');
+    debug('io does not support servoConfig');
   }
 }
 
@@ -401,7 +402,7 @@ SYSEX_REQUEST[EXTENDED_ANALOG] = function(board){
     value = value | board.currentBuffer[4 + i] << ((i + 1) * 7);
   }
 
-  console.log('SYSEX_REQUEST[EXTENDED_ANALOG] pin', pin, 'value', value);
+  debug('SYSEX_REQUEST[EXTENDED_ANALOG] pin', pin, 'value', value);
 
   board.io.analogWrite(pin, value);
 }
@@ -418,7 +419,7 @@ SYSEX_REQUEST[EXTENDED_ANALOG] = function(board){
  */
 
 SYSEX_REQUEST[PIN_STATE_QUERY] = function (board) {
-  console.log('SYSEX_REQUEST[PIN_STATE_QUERY] not implemented', board.currentBuffer);
+  debug('SYSEX_REQUEST[PIN_STATE_QUERY] not implemented', board.currentBuffer);
 
   //TODO - handle this
 
@@ -436,7 +437,7 @@ SYSEX_REQUEST[PIN_STATE_QUERY] = function (board) {
 
 
 SYSEX_REQUEST[I2C_REPLY] = function(board) {
-  console.log('SYSEX_REQUEST[I2C_REPLY] not implemented', board.currentBuffer);
+  debug('SYSEX_REQUEST[I2C_REPLY] not implemented', board.currentBuffer);
 };
 
 
@@ -451,17 +452,17 @@ SYSEX_REQUEST[I2C_REQUEST] = function(board) {
     data.push(board.currentBuffer[(i * 2) + 4] | (board.currentBuffer[(i * 2) + 5] << 7));
   }
 
-  console.log('SYSEX_REQUEST[I2C_REQUEST]', 'address', address, 'mode', mode, 'byteLength', byteLength, 'data', data);
+  debug('SYSEX_REQUEST[I2C_REQUEST]', 'address', address, 'mode', mode, 'byteLength', byteLength, 'data', data);
 
   if(mode === I2C_MODES.WRITE){
     if(board.io.i2cWrite){
       board.io.i2cWrite(address, data);
     }else{
-      console.log('board does not support i2cWrite');
+      debug('board does not support i2cWrite');
     }
 
   }else if(mode === I2C_MODES.READ){
-    console.log('SYSEX_REQUEST[I2C_REQUEST] READ not implemented yet', board.currentBuffer);
+    debug('SYSEX_REQUEST[I2C_REQUEST] READ not implemented yet', board.currentBuffer);
 
     if(board.io.i2cReadOnce){
       var register = data[0];
@@ -490,7 +491,7 @@ SYSEX_REQUEST[I2C_REQUEST] = function(board) {
 
       });
     }else{
-      console.log('board does not support i2cReadOnce');
+      debug('board does not support i2cReadOnce');
     }
 
 
@@ -522,25 +523,25 @@ SYSEX_REQUEST[I2C_REQUEST] = function(board) {
 
       });
     }else{
-      console.log('board does not support i2cRead');
+      debug('board does not support i2cRead');
     }
 
   }else if(mode === I2C_MODES.STOP_READING){
-    console.log('SYSEX_REQUEST[I2C_REQUEST] READ not implemented yet', board.currentBuffer);
+    debug('SYSEX_REQUEST[I2C_REQUEST] READ not implemented yet', board.currentBuffer);
   }
 
 };
 
 SYSEX_REQUEST[I2C_CONFIG] = function(board) {
   var value = board.currentBuffer[2] | (board.currentBuffer[3] << 7);
-  console.log('SYSEX_REQUEST[I2C_CONFIG] delay', value);
+  debug('SYSEX_REQUEST[I2C_CONFIG] delay', value);
   if(board.io.i2cConfig){
     board.io.i2cConfig(value);
   }
 };
 
 SYSEX_REQUEST[ONEWIRE_DATA] = function(board) {
-  console.log('SYSEX_REQUEST[ONEWIRE_DATA] not implemented yet');
+  debug('SYSEX_REQUEST[ONEWIRE_DATA] not implemented yet');
   //TODO handle this
 
   // var subCommand = board.currentBuffer[2];
@@ -553,7 +554,7 @@ SYSEX_REQUEST[ONEWIRE_DATA] = function(board) {
 };
 
 SYSEX_REQUEST[ONEWIRE_SEARCH_REPLY] = function(board) {
-  console.log('SYSEX_REQUEST[ONEWIRE_SEARCH_REPLY] not implemented yet');
+  debug('SYSEX_REQUEST[ONEWIRE_SEARCH_REPLY] not implemented yet');
   //TODO handle this
 
   // var pin = board.currentBuffer[3];
@@ -563,7 +564,7 @@ SYSEX_REQUEST[ONEWIRE_SEARCH_REPLY] = function(board) {
 };
 
 SYSEX_REQUEST[ONEWIRE_SEARCH_ALARMS_REPLY] = function(board) {
-  console.log('SYSEX_REQUEST[ONEWIRE_SEARCH_ALARMS_REPLY] not implemented yet');
+  debug('SYSEX_REQUEST[ONEWIRE_SEARCH_ALARMS_REPLY] not implemented yet');
   //TODO handle this
 
   // var pin = board.currentBuffer[3];
@@ -573,7 +574,7 @@ SYSEX_REQUEST[ONEWIRE_SEARCH_ALARMS_REPLY] = function(board) {
 };
 
 SYSEX_REQUEST[ONEWIRE_READ_REPLY] = function(board) {
-  console.log('SYSEX_REQUEST[ONEWIRE_READ_REPLY] not implemented yet');
+  debug('SYSEX_REQUEST[ONEWIRE_READ_REPLY] not implemented yet');
   //TODO handle this
 
   // var encoded = board.currentBuffer.slice(4, board.currentBuffer.length - 1);
@@ -590,7 +591,7 @@ SYSEX_REQUEST[ONEWIRE_READ_REPLY] = function(board) {
  */
 
 SYSEX_REQUEST[STRING_DATA] = function(board) {
-  console.log('SYSEX_REQUEST[STRING_DATA] not implemented yet');
+  debug('SYSEX_REQUEST[STRING_DATA] not implemented yet');
   //TODO handle this
 
   // var string = new Buffer(board.currentBuffer.slice(2, -1)).toString("utf8").replace(/\0/g, "");
@@ -602,7 +603,7 @@ SYSEX_REQUEST[STRING_DATA] = function(board) {
  */
 
 SYSEX_REQUEST[PULSE_IN] = function(board) {
-  console.log('SYSEX_REQUEST[PULSE_IN] not implemented yet');
+  debug('SYSEX_REQUEST[PULSE_IN] not implemented yet');
   //TODO handle this
 
   // var pin = (board.currentBuffer[2] & 0x7F) | ((board.currentBuffer[3] & 0x7F) << 7);
@@ -622,7 +623,7 @@ SYSEX_REQUEST[PULSE_IN] = function(board) {
  */
 
 SYSEX_REQUEST[PULSE_OUT] = function(board) {
-  console.log('SYSEX_REQUEST[PULSE_OUT] not implemented yet');
+  debug('SYSEX_REQUEST[PULSE_OUT] not implemented yet');
   //TODO handle this
 
 };
@@ -633,7 +634,7 @@ SYSEX_REQUEST[PULSE_OUT] = function(board) {
  */
 
 SYSEX_REQUEST[STEPPER] = function(board) {
-  console.log('SYSEX_REQUEST[STEPPER] not implemented yet');
+  debug('SYSEX_REQUEST[STEPPER] not implemented yet');
   //TODO handle this
 
   // var deviceNum = board.currentBuffer[2];
@@ -660,14 +661,14 @@ function IOClient(options) {
   this.sp.on('data', function(data) {
     var byt, cmd;
 
-    console.log('remote data in', data, data.length);
+    debug('remote data in', data, data.length);
 
 
 
     for (var i = 0; i < data.length; i++) {
       byt = data[i];
 
-      //console.log('byt', byt);
+      //debug('byt', byt);
 
 
       // we dont want to push 0 as the first byte on our buffer
@@ -676,16 +677,16 @@ function IOClient(options) {
       } else {
 
         if (i === 0 && includes([REPORT_VERSION, SYSTEM_RESET], byt)) {
-          console.log('one byte command', new Buffer([byt]));
+          debug('one byte command', new Buffer([byt]));
           try{
             MIDI_REQUEST[byt](self);
           }catch(err){
-            console.log('error running one byte command: ' + new Buffer([byt]), err );
+            debug('error running one byte command: ' + new Buffer([byt]), err );
           }
         }
         else{
           self.currentBuffer.push(byt);
-          //console.log('self.currentBuffer', new Buffer(self.currentBuffer).toString('hex'));
+          //debug('self.currentBuffer', new Buffer(self.currentBuffer).toString('hex'));
         }
 
 
@@ -696,16 +697,16 @@ function IOClient(options) {
 
 
           if(SYSEX_REQUEST[self.currentBuffer[1]]){
-            console.log('handling sysex', new Buffer(self.currentBuffer), new Buffer([self.currentBuffer[1], QUERY_FIRMWARE]));
+            debug('handling sysex', new Buffer(self.currentBuffer), new Buffer([self.currentBuffer[1], QUERY_FIRMWARE]));
             try{
               SYSEX_REQUEST[self.currentBuffer[1]](self);
             }catch(exp){
-              console.log('error handling sysex', exp);
+              debug('error handling sysex', exp);
             }
-            console.log('handled');
+            debug('handled');
           }
           else{
-            console.log('unhandled SYSEX', self.currentBuffer)
+            debug('unhandled SYSEX', self.currentBuffer)
           }
           self.currentBuffer = [];
 
@@ -719,7 +720,7 @@ function IOClient(options) {
 
           // Check if it is not a valid command
           if (cmd !== REPORT_VERSION && cmd !== ANALOG_MESSAGE && cmd !== DIGITAL_MESSAGE) {
-            //console.log("OUT OF SYNC - CMD: "+cmd);
+            //debug("OUT OF SYNC - CMD: "+cmd);
             // Clean buffer
             //self.currentBuffer.length = 0;
           }
@@ -729,7 +730,7 @@ function IOClient(options) {
         // There are 2 bytes in the buffer and the first is not START_SYSEX:
         // Might have a 2 byte Command
         if (self.currentBuffer.length === 2 && self.currentBuffer[0] !== START_SYSEX) {
-          console.log('2 byte check', self.currentBuffer);
+          debug('2 byte check', self.currentBuffer);
           try{
             if(self.currentBuffer[0] >= 0xC0 && self.currentBuffer[0] <= 0xCF){
               MIDI_REQUEST[REPORT_ANALOG](self);
@@ -740,7 +741,7 @@ function IOClient(options) {
               self.currentBuffer.length = 0;
           }
           }catch(exp){
-            console.log('err handling reports', exp);
+            debug('err handling reports', exp);
           }
 
         }
@@ -756,15 +757,15 @@ function IOClient(options) {
             cmd = self.currentBuffer[0];
           }
 
-          //console.log('MIDI?', cmd);
+          //debug('MIDI?', cmd);
 
           if (MIDI_REQUEST[cmd]) {
-            console.log('MIDI', cmd);
+            debug('MIDI', cmd);
             try{
               MIDI_REQUEST[cmd](self);
             }
             catch(err){
-              console.log('error handling MIDI_REQUEST', cmd, err);
+              debug('error handling MIDI_REQUEST', cmd, err);
             }
             self.currentBuffer.length = 0;
           } else {
@@ -776,7 +777,7 @@ function IOClient(options) {
       }
     }
 
-    //console.log('cmd in', cmd, new Buffer(self.currentBuffer).toString('hex'));
+    //debug('cmd in', cmd, new Buffer(self.currentBuffer).toString('hex'));
 
   }.bind(this));
 
